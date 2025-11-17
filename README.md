@@ -420,3 +420,27 @@ Current version: 1.0.0
 - Spring Cloud Netflix Eureka Client
 - JJWT 0.12.3
 - Java 21
+
+---
+
+## Overview
+
+This API Gateway is part of **Phase 2: Microservices Architecture** of the Yushan Platform. It serves as the single entry point for all microservices, routing requests to the appropriate backend services through service discovery with Eureka.
+
+**Deployment**: All backend services including this API Gateway are deployed on **Digital Ocean** using Terraform (Infrastructure as Code).
+
+**Status**: ✅ Production Ready
+
+---
+
+## Links
+
+- **Service Registry**: [yushan-microservices-service-registry](https://github.com/phutruonnttn/yushan-microservices-service-registry)
+- **Config Server**: [yushan-microservices-config-server](https://github.com/phutruonnttn/yushan-microservices-config-server)
+- **User Service**: [yushan-microservices-user-service](https://github.com/phutruonnttn/yushan-microservices-user-service)
+- **Content Service**: [yushan-microservices-content-service](https://github.com/phutruonnttn/yushan-microservices-content-service)
+- **Engagement Service**: [yushan-microservices-engagement-service](https://github.com/phutruonnttn/yushan-microservices-engagement-service)
+- **Gamification Service**: [yushan-microservices-gamification-service](https://github.com/phutruonnttn/yushan-microservices-gamification-service)
+- **Analytics Service**: [yushan-microservices-analytics-service](https://github.com/phutruonnttn/yushan-microservices-analytics-service)
+- **Platform Documentation**: [yushan-platform-docs](https://github.com/phutruonnttn/yushan-platform-docs) - Complete documentation for all phases
+- **Phase 2 Architecture**: See [Phase 2 Microservices Architecture](https://github.com/phutruonnttn/yushan-platform-docs/blob/main/docs/phase2-microservices/PHASE2_MICROSERVICES_ARCHITECTURE.md)
