@@ -93,7 +93,20 @@ All requests go through `http://localhost:8080/api/*`
 
 ## Authentication
 
-**Note**: JWT authentication is handled by individual microservices, not by the API Gateway. Each service validates JWT tokens independently.
+**Current Implementation (Phase 2)**: JWT authentication is currently handled by individual microservices. Each service validates JWT tokens independently.
+
+**Best Practice (Recommended for Phase 3)**: API Gateway should validate JWT tokens centrally to:
+- ✅ Reduce load on microservices (validate once at gateway)
+- ✅ Reject invalid tokens early (before routing)
+- ✅ Centralized security policy
+- ✅ Consistent authentication across all services
+- ✅ Better performance (single validation point)
+
+**Implementation Approach**:
+1. **Gateway-Level Validation**: Validate JWT token in API Gateway filter
+2. **Forward Valid Token**: Pass validated token to downstream services
+3. **Public Endpoints**: Skip validation for public endpoints (login, register, etc.)
+4. **Token Extraction**: Extract user info from token and add to request headers
 
 ### Getting a Token
 
@@ -361,6 +374,86 @@ private static final List<String> PUBLIC_PATHS = List.of(
     "/api/your-new-public-endpoint"
 );
 ```
+
+### Gateway-Level JWT Validation (Phase 3 Recommended)
+
+For Phase 3, implement centralized JWT validation at the gateway:
+
+```java
+@Component
+public class JwtAuthenticationGatewayFilter implements GatewayFilter {
+    
+    @Autowired
+    private JwtUtil jwtUtil;
+    
+    private static final List<String> PUBLIC_PATHS = List.of(
+        "/api/v1/auth/login",
+        "/api/v1/auth/register",
+        "/api/v1/auth/refresh",
+        "/api/v1/novels",  // Public browsing
+        "/api/v1/categories"
+    );
+    
+    @Override
+    public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
+        ServerHttpRequest request = exchange.getRequest();
+        String path = request.getURI().getPath();
+        
+        // Skip validation for public endpoints
+        if (PUBLIC_PATHS.stream().anyMatch(path::startsWith)) {
+            return chain.filter(exchange);
+        }
+        
+        // Extract token from Authorization header
+        String authHeader = request.getHeaders().getFirst("Authorization");
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            return unauthorized(exchange);
+        }
+        
+        String token = authHeader.substring(7);
+        
+        // Validate token
+        if (!jwtUtil.validateToken(token)) {
+            return unauthorized(exchange);
+        }
+        
+        // Extract user info and add to request headers
+        String userId = jwtUtil.extractUserId(token);
+        String email = jwtUtil.extractEmail(token);
+        
+        // Forward user info to downstream services
+        ServerHttpRequest modifiedRequest = request.mutate()
+            .header("X-User-Id", userId)
+            .header("X-User-Email", email)
+            .build();
+        
+        return chain.filter(exchange.mutate().request(modifiedRequest).build());
+    }
+    
+    private Mono<Void> unauthorized(ServerWebExchange exchange) {
+        ServerHttpResponse response = exchange.getResponse();
+        response.setStatusCode(HttpStatus.UNAUTHORIZED);
+        return response.setComplete();
+    }
+}
+```
+
+**Configuration**:
+```yaml
+spring:
+  cloud:
+    gateway:
+      default-filters:
+        - name: JwtAuthentication
+          args:
+            jwtSecret: ${JWT_SECRET}
+```
+
+**Benefits**:
+- ✅ Single point of authentication
+- ✅ Microservices can trust gateway-validated requests
+- ✅ Reduced authentication overhead in services
+- ✅ Consistent security policy
 
 ## Performance
 
