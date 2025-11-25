@@ -331,4 +331,13 @@ logging:
     reactor.netty: INFO
     com.yushan.gateway: DEBUG
 
-# JWT Configuration removed - handled by individual services
+# JWT Configuration for Gateway-level validation
+jwt:
+  secret: ${JWT_SECRET:yushan-micro-service-secret-key-for-jwt-token-generation-and-validation-2024}
+  issuer: ${JWT_ISSUER:yushan-micro-service}
+  algorithm: ${JWT_ALGORITHM:HS256}
+
+# Gateway HMAC Configuration for request signature
+gateway:
+  hmac:
+    secret: ${GATEWAY_HMAC_SECRET:yushan-gateway-hmac-secret-key-for-request-signature-2024}

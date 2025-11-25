@@ -93,20 +93,60 @@ All requests go through `http://localhost:8080/api/*`
 
 ## Authentication
 
-**Current Implementation (Phase 2)**: JWT authentication is currently handled by individual microservices. Each service validates JWT tokens independently.
+**✅ Current Implementation**: JWT authentication is **centralized at the API Gateway level**. All JWT tokens are validated once at the gateway before routing to microservices.
 
-**Best Practice (Recommended for Phase 3)**: API Gateway should validate JWT tokens centrally to:
-- ✅ Reduce load on microservices (validate once at gateway)
-- ✅ Reject invalid tokens early (before routing)
-- ✅ Centralized security policy
-- ✅ Consistent authentication across all services
-- ✅ Better performance (single validation point)
+### Benefits
+- ✅ **Single Point of Validation**: Validate JWT token once at gateway, not in each service
+- ✅ **Early Rejection**: Reject invalid/expired tokens before routing (saves resources)
+- ✅ **Centralized Security Policy**: All authentication logic in one place
+- ✅ **Consistent Authentication**: All services receive validated user information
+- ✅ **Better Performance**: Reduced load on microservices (no JWT validation overhead)
+- ✅ **Simplified Services**: Microservices only trust gateway-validated requests
+- ✅ **HMAC Signature Protection**: Prevents header forgery attacks with cryptographic signatures
+- ✅ **Replay Attack Prevention**: Timestamp validation prevents reuse of old signatures
 
-**Implementation Approach**:
-1. **Gateway-Level Validation**: Validate JWT token in API Gateway filter
-2. **Forward Valid Token**: Pass validated token to downstream services
-3. **Public Endpoints**: Skip validation for public endpoints (login, register, etc.)
-4. **Token Extraction**: Extract user info from token and add to request headers
+### How It Works
+
+1. **Client Request** → API Gateway with JWT token in `Authorization: Bearer <token>` header
+2. **Gateway Validation** → `JwtAuthenticationGatewayFilter` validates token:
+   - Checks token signature, expiration, and format
+   - Extracts user information (userId, email, role, etc.)
+   - Rejects invalid/expired tokens with 401 Unauthorized
+3. **Header Enrichment** → Gateway adds validated user info to request headers:
+   - `X-Gateway-Validated: true` - Marks request as gateway-validated
+   - `X-User-Id: <userId>` - User ID from token
+   - `X-User-Email: <email>` - User email from token
+   - `X-User-Username: <username>` - Username from token
+   - `X-User-Role: <role>` - User role from token
+   - `X-User-Status: <status>` - User status from token (0=NORMAL, 1=SUSPENDED, 2=BANNED)
+   - `X-Gateway-Timestamp: <timestamp>` - Request timestamp (milliseconds)
+   - `X-Gateway-Signature: <hmac-signature>` - HMAC-SHA256 signature to prevent header forgery
+4. **HMAC Signature** → Gateway generates HMAC signature using shared secret:
+   - Signature includes: `userId|email|role|status|timestamp`
+   - Algorithm: HMAC-SHA256
+   - Base64-encoded signature prevents attackers from forging gateway headers
+5. **Service Trust** → Microservices verify HMAC signature before trusting headers:
+   - Services verify signature using shared secret
+   - Check timestamp to prevent replay attacks (5-minute tolerance)
+   - Extract user info from gateway headers (no JWT validation needed)
+   - **Check user status** - Verify user is enabled (not suspended/banned) using `isEnabled()` check
+   - Reject disabled users with **403 Forbidden** response
+   - Set authentication context from headers (only if user is enabled)
+
+### Public Endpoints
+
+These endpoints **do NOT require authentication** (skipped by gateway filter):
+- `/api/v1/auth/**` - Authentication endpoints (login, register, refresh)
+- `/api/v1/public/**` - Public endpoints
+- `/api/v1/health` - Health checks
+- `/actuator/**` - Actuator endpoints
+- `/v3/api-docs/**`, `/swagger-ui/**` - API documentation
+- `/api/v1/novels` (GET) - Browse novels (public)
+- `/api/v1/categories` (GET) - Browse categories (public)
+- `/api/v1/comments` (GET) - Read comments (public)
+- `/api/v1/reviews` (GET) - Read reviews (public)
+- `/api/v1/ranking/**` (GET) - Public rankings
+- And more... (see `JwtAuthenticationGatewayFilter` for complete list)
 
 ### Getting a Token
 
@@ -126,15 +166,12 @@ curl http://localhost:8080/api/v1/users/me \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
 ```
 
-## Public Endpoints
+### Inter-Service Communication
 
-These endpoints do NOT require authentication (handled by individual services):
-- `/api/v1/auth/login`
-- `/api/v1/auth/register`
-- `/api/v1/auth/refresh`
-- `/api/v1/novels` (browsing)
-- `/api/v1/categories` (browsing)
-- `/actuator/health`
+When services call each other via Feign clients:
+- **Preferred**: Forward gateway headers (`X-Gateway-Validated`, `X-User-Id`, etc.)
+- **Fallback**: Forward JWT token in `Authorization` header (backward compatibility)
+- Target service will validate JWT token if gateway headers are not present
 
 ## Health Check
 
@@ -150,6 +187,21 @@ curl http://localhost:8080/actuator/health
 ```
 
 ## Configuration
+
+### HMAC Signature Configuration
+
+The Gateway uses HMAC-SHA256 signatures to prevent header forgery attacks. Configure the shared secret:
+
+```yaml
+gateway:
+  hmac:
+    secret: ${GATEWAY_HMAC_SECRET:yushan-gateway-hmac-secret-key-for-request-signature-2024}
+```
+
+**Important**: The same secret must be configured in all microservices for signature verification to work.
+
+**Environment Variable**:
+- `GATEWAY_HMAC_SECRET`: Shared secret for HMAC signature generation/verification
 
 ### Environment Variables
 
