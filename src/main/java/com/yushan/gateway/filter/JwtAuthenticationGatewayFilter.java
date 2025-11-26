@@ -1,5 +1,6 @@
 package com.yushan.gateway.filter;
 
+import com.yushan.gateway.service.UserBlocklistService;
 import com.yushan.gateway.util.HmacUtil;
 import com.yushan.gateway.util.JwtUtil;
 import lombok.extern.slf4j.Slf4j;
@@ -21,6 +22,7 @@ import jakarta.annotation.PostConstruct;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * JWT Authentication Gateway Filter
@@ -41,6 +43,9 @@ public class JwtAuthenticationGatewayFilter implements GlobalFilter, Ordered {
 
     @Autowired
     private JwtUtil jwtUtil;
+    
+    @Autowired
+    private UserBlocklistService userBlocklistService;
     
     @PostConstruct
     public void init() {
@@ -200,6 +205,22 @@ public class JwtAuthenticationGatewayFilter implements GlobalFilter, Ordered {
             if (userId == null || email == null) {
                 log.warn("JWT Filter - Missing user info in token for path: {}", path);
                 return unauthorized(exchange, "Invalid token: missing user information");
+            }
+
+            // Check if user is in blocklist (SUSPENDED or BANNED)
+            try {
+                UUID userUuid = UUID.fromString(userId);
+                if (userBlocklistService.isBlocked(userUuid)) {
+                    log.warn("JWT Filter - User {} is blocked (SUSPENDED or BANNED), rejecting request for path: {}", userId, path);
+                    return forbidden(exchange, "User account is disabled or suspended");
+                }
+            } catch (IllegalArgumentException e) {
+                log.warn("JWT Filter - Invalid user ID format: {}", userId);
+                // Continue with request - invalid UUID format, but let downstream service handle it
+            } catch (Exception e) {
+                log.error("JWT Filter - Error checking blocklist for user: {}", userId, e);
+                // If blocklist check fails, fallback to JWT status check (graceful degradation)
+                // Continue with request - blocklist may not be synced yet
             }
 
             log.debug("JWT Filter - Token validated successfully for user: {} ({})", email, userId);
@@ -385,6 +406,24 @@ public class JwtAuthenticationGatewayFilter implements GlobalFilter, Ordered {
         response.getHeaders().add("Content-Type", MediaType.APPLICATION_JSON_VALUE);
 
         String body = String.format("{\"error\": \"Unauthorized\", \"message\": \"%s\"}", message);
+        DataBuffer buffer = response.bufferFactory().wrap(body.getBytes(StandardCharsets.UTF_8));
+        
+        return response.writeWith(Mono.just(buffer));
+    }
+
+    /**
+     * Return forbidden response (403)
+     * 
+     * @param exchange ServerWebExchange
+     * @param message Error message
+     * @return Mono<Void>
+     */
+    private Mono<Void> forbidden(ServerWebExchange exchange, String message) {
+        ServerHttpResponse response = exchange.getResponse();
+        response.setStatusCode(HttpStatus.FORBIDDEN);
+        response.getHeaders().add("Content-Type", MediaType.APPLICATION_JSON_VALUE);
+
+        String body = String.format("{\"error\": \"Forbidden\", \"message\": \"%s\", \"status\": 403}", message);
         DataBuffer buffer = response.bufferFactory().wrap(body.getBytes(StandardCharsets.UTF_8));
         
         return response.writeWith(Mono.just(buffer));
