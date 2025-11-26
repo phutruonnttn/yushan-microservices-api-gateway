@@ -127,6 +127,13 @@
         <dependency>
             <groupId>org.springframework.cloud</groupId>
             <artifactId>spring-cloud-starter-openfeign</artifactId>
+            <exclusions>
+                <!-- Exclude vulnerable commons-fileupload (CVE-2025-48976) from feign-form-spring -->
+                <exclusion>
+                    <groupId>commons-fileupload</groupId>
+                    <artifactId>commons-fileupload</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
         
         <!-- Spring Web for HttpMessageConverters (required by Feign Client in Gateway) -->
@@ -164,6 +171,13 @@
                 <groupId>org.springframework.cloud</groupId>
                 <artifactId>spring-cloud-gateway-server</artifactId>
                 <version>4.2.6</version>
+            </dependency>
+            <!-- Override kafka-clients version to fix security vulnerabilities -->
+            <!-- Using 3.9.0 which is the latest stable version compatible with spring-kafka 3.3.10 -->
+            <dependency>
+                <groupId>org.apache.kafka</groupId>
+                <artifactId>kafka-clients</artifactId>
+                <version>3.9.0</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
