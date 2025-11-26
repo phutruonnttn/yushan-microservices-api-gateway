@@ -563,18 +563,38 @@ Current version: 1.0.0
 - Spring Boot 3.4.10
 - Spring Cloud Gateway 2024.0.2
 - Spring Cloud Netflix Eureka Client
-- JJWT 0.12.3
+- JJWT 0.12.6
 - Java 21
+
+## Security
+
+### Vulnerability Fixes
+
+- ✅ **CVE-2025-48924 Fixed**: Excluded vulnerable `commons-lang:commons-lang@2.6` from `spring-cloud-starter-gateway` and `spring-cloud-starter-netflix-eureka-client` dependencies
+- ✅ **Security Scanning**: CI/CD pipeline includes OWASP Dependency Check and Snyk vulnerability scanning
+- ✅ **HMAC Signature Protection**: Prevents header forgery attacks with cryptographic signatures
+
+## CI/CD Pipeline
+
+The API Gateway includes a comprehensive CI/CD pipeline with:
+
+- ✅ **Unit Tests**: JUnit 5 tests for JWT utilities, HMAC utilities, and gateway filters
+- ✅ **Code Quality**: SpotBugs static analysis, Checkstyle code style checks
+- ✅ **Code Coverage**: JaCoCo coverage reports
+- ✅ **Security Scanning**: OWASP Dependency Check and Snyk vulnerability scanning
+- ✅ **Container Scanning**: Trivy container vulnerability scanning
+- ✅ **Quality Gates**: SonarCloud analysis and quality gates
+- ✅ **Docker Build**: Automated Docker image building and pushing to GitHub Container Registry
 
 ---
 
 ## Overview
 
-This API Gateway is part of **Phase 2: Microservices Architecture** of the Yushan Platform. It serves as the single entry point for all microservices, routing requests to the appropriate backend services through service discovery with Eureka.
+This API Gateway is part of **Phase 3: Kubernetes & AWS Deployment** of the Yushan Platform. It serves as the single entry point for all microservices, routing requests to the appropriate backend services through service discovery with Eureka.
 
 **Deployment**: All backend services including this API Gateway are deployed on **Digital Ocean** using Terraform (Infrastructure as Code).
 
-**Status**: ✅ Production Ready
+**Status**: ✅ Production Ready | 🔄 Phase 3 Development
 
 ---
 
