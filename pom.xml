@@ -122,6 +122,12 @@
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
+            <!-- Override gateway version to fix CVE-2025-41243 -->
+            <dependency>
+                <groupId>org.springframework.cloud</groupId>
+                <artifactId>spring-cloud-gateway-server</artifactId>
+                <version>4.2.6</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
     
