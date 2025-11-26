@@ -12,6 +12,9 @@ RUN ./mvnw dependency:go-offline
 # Copy source code
 COPY src ./src
 
+# Copy checkstyle.xml for code quality checks
+COPY checkstyle.xml checkstyle.xml
+
 # Build the application
 RUN ./mvnw clean package -DskipTests
 
