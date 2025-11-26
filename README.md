@@ -571,6 +571,7 @@ Current version: 1.0.0
 ### Vulnerability Fixes
 
 - ✅ **CVE-2025-48924 Fixed**: Excluded vulnerable `commons-lang:commons-lang@2.6` from `spring-cloud-starter-gateway` and `spring-cloud-starter-netflix-eureka-client` dependencies
+- ✅ **CVE-2025-41243 Fixed**: Upgraded `spring-cloud-gateway-server` from 4.2.4 to 4.2.6 to fix Expression Language Injection vulnerability
 - ✅ **Security Scanning**: CI/CD pipeline includes OWASP Dependency Check and Snyk vulnerability scanning
 - ✅ **HMAC Signature Protection**: Prevents header forgery attacks with cryptographic signatures
 
