@@ -5,6 +5,31 @@ spring:
   application:
     name: api-gateway
   
+  # Redis Configuration for User Blocklist
+  data:
+    redis:
+      host: ${REDIS_HOST:gateway-redis}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: 2000ms
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 0
+
+  # Kafka Configuration for User Status Events
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:kafka:29092}
+    consumer:
+      group-id: api-gateway-user-status-listener
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-serializer: org.apache.kafka.common.serialization.StringDeserializer
+  
   cloud:
     gateway:
       # Enable service discovery routing
@@ -465,4 +490,22 @@ logging:
     reactor.netty: INFO
     com.yushan.gateway: DEBUG
 
-# JWT Configuration removed - handled by individual services
+# JWT Configuration for Gateway-level validation
+jwt:
+  secret: ${JWT_SECRET:yushan-micro-service-secret-key-for-jwt-token-generation-and-validation-2024}
+  issuer: ${JWT_ISSUER:yushan-micro-service}
+  algorithm: ${JWT_ALGORITHM:HS256}
+
+# Gateway HMAC Configuration for request signature
+gateway:
+  hmac:
+    secret: ${GATEWAY_HMAC_SECRET:yushan-gateway-hmac-secret-key-for-request-signature-2024}
+
+# User Blocklist Bootstrap Configuration
+user-blocklist:
+  bootstrap:
+    enabled: true
+    max-retry-attempts: 5
+    retry-delays: 30s,60s,120s,240s,480s  # Exponential backoff delays (starting from 30s)
+    user-service-url: ${USER_SERVICE_URL:http://user-service:8081}
+    sync-interval: 1h  # Periodic sync interval

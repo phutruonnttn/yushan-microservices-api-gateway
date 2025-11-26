@@ -11,6 +11,9 @@ API Gateway and routing service for Yushan Novel Platform microservices architec
 - Health monitoring
 - Load balancing across service instances
 - Service routing and path rewriting
+- **Gateway-Level JWT Authentication** - Centralized JWT validation
+- **HMAC Signature Protection** - Prevents header forgery attacks
+- **User Blocklist Management** - Real-time Redis blocklist for inactive users (Phase 3)
 
 ## Architecture
 
@@ -29,6 +32,8 @@ The API Gateway routes requests to the following microservices:
 - Maven 3.8+
 - Eureka Server running on port 8761
 - All microservices running on their respective ports
+- **Redis** (for user blocklist - Phase 3)
+- **Kafka** (for user status events - Phase 3)
 
 ### Start the Gateway
 ```bash
@@ -382,18 +387,29 @@ yushan-api-gateway/
 ├── src/
 │   ├── main/
 │   │   ├── java/com/yushan/gateway/
-│   │   │   ├── ApiGatewayApplication.java
+│   │   │   ├── YushanApiGatewayApplication.java
 │   │   │   ├── config/
 │   │   │   │   ├── CorsConfig.java
-│   │   │   │   └── GatewayConfig.java
-│   │   │   └── filter/
-│   │   │       ├── AuthenticationFilter.java
-│   │   │       └── LoggingFilter.java
+│   │   │   │   └── RedisConfig.java
+│   │   │   ├── filter/
+│   │   │   │   ├── JwtAuthenticationGatewayFilter.java
+│   │   │   │   └── LoggingFilter.java
+│   │   │   ├── service/
+│   │   │   │   ├── UserBlocklistService.java
+│   │   │   │   └── UserBlocklistBootstrapService.java
+│   │   │   ├── listener/
+│   │   │   │   └── UserStatusEventListener.java
+│   │   │   ├── client/
+│   │   │   │   └── UserServiceClient.java
+│   │   │   └── util/
+│   │   │       ├── JwtUtil.java
+│   │   │       └── HmacUtil.java
 │   │   └── resources/
 │   │       ├── application.yml
 │   │       └── application-docker.yml
 │   └── test/
 ├── Dockerfile
+├── docker-compose.yml
 ├── pom.xml
 └── README.md
 ```
@@ -526,6 +542,101 @@ spring:
         response-timeout: 30s
 ```
 
+## User Blocklist Management (Phase 3)
+
+**✅ Implemented**: Redis Block List (Option B) for real-time inactive user validation
+
+### Overview
+
+Gateway maintains a Redis blocklist of inactive users (SUSPENDED or BANNED) to reject their requests immediately, even if their JWT token is still valid.
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  Gateway Startup                                            │
+│  └─> Bootstrap Service (Background Thread)                 │
+│      └─> Retry với Exponential Backoff (30s → 60s → ...)   │
+│          └─> Call User Service /api/v1/internal/blocked-users│
+│              └─> Sync vào Redis Set: user:blocklist        │
+└─────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────┐
+│  Real-time Updates                                          │
+│  User Service → updateUserStatus()                         │
+│      └─> Kafka Event: user-status-events                   │
+│          └─> Gateway: UserStatusEventListener              │
+│              └─> Update Redis blocklist                    │
+└─────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────┐
+│  Request Flow                                               │
+│  Request → JWT Filter                                       │
+│      └─> Validate JWT                                      │
+│          └─> Check Redis blocklist                         │
+│              └─> If blocked → 403 Forbidden               │
+│              └─> If not blocked → Forward request          │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Components
+
+1. **UserBlocklistService**: Manages Redis Set operations
+   - `isBlocked(UUID userId)`: Check if user is in blocklist
+   - `addToBlocklist(UUID userId)`: Add user to blocklist
+   - `removeFromBlocklist(UUID userId)`: Remove user from blocklist
+   - `syncBlocklist(Set<UUID>)`: Sync entire blocklist (bootstrap)
+
+2. **UserBlocklistBootstrapService**: Syncs blocked users on startup
+   - Background thread (doesn't block Gateway startup)
+   - Exponential backoff retry (30s, 60s, 120s, 240s, 480s)
+   - Graceful degradation (Gateway works even if sync fails)
+   - Uses Feign Client to call User Service
+
+3. **UserStatusEventListener**: Updates blocklist from Kafka events
+   - Listens to `user-status-events` topic
+   - Updates Redis blocklist in real-time when user status changes
+
+4. **JwtAuthenticationGatewayFilter**: Checks blocklist before forwarding
+   - After JWT validation, checks Redis blocklist
+   - Rejects blocked users with 403 Forbidden
+   - Graceful fallback if blocklist check fails
+
+### Configuration
+
+```yaml
+# Redis Configuration
+spring:
+  data:
+    redis:
+      host: ${REDIS_HOST:gateway-redis}
+      port: ${REDIS_PORT:6379}
+
+# Kafka Configuration
+spring:
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:kafka:29092}
+    consumer:
+      group-id: api-gateway-user-status-listener
+
+# Bootstrap Configuration
+user-blocklist:
+  bootstrap:
+    enabled: true
+    max-retry-attempts: 5
+    retry-delays: 30s,60s,120s,240s,480s
+    user-service-url: ${USER_SERVICE_URL:http://user-service:8081}
+```
+
+### Benefits
+
+- ✅ **Real-time Updates**: Blocklist updated via Kafka events (<1s latency)
+- ✅ **Memory Efficient**: Only stores inactive users (~1-5MB for 100K blocked users)
+- ✅ **Fast Lookup**: O(1) Redis Set lookup (<1ms)
+- ✅ **Graceful Degradation**: Gateway works even if blocklist not synced
+- ✅ **Scalable**: Blocklist size doesn't increase with total users
+- ✅ **Resilient**: Bootstrap retry handles startup order issues
+
 ## Security
 
 ### Best Practices
@@ -535,6 +646,7 @@ spring:
 3. **Rotate JWT secrets regularly**
 4. **Implement rate limiting** (consider Spring Cloud Gateway rate limiter)
 5. **Monitor failed authentication attempts**
+6. **User Blocklist**: Real-time validation of inactive users via Redis
 
 ## Contributing
 
@@ -563,6 +675,9 @@ Current version: 1.0.0
 - Spring Boot 3.4.10
 - Spring Cloud Gateway 2024.0.2
 - Spring Cloud Netflix Eureka Client
+- Spring Cloud OpenFeign (for inter-service calls)
+- Spring Data Redis (for user blocklist)
+- Spring Kafka (for user status events)
 - JJWT 0.12.6
 - Java 21
 

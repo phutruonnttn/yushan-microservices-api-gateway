@@ -1,6 +1,24 @@
 version: '3.8'
 
 services:
+  # Redis for Gateway (User Blocklist)
+  gateway-redis:
+    image: redis:7-alpine
+    container_name: yushan-gateway-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
+    ports:
+      - "6384:6379"
+    volumes:
+      - gateway_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - yushan-platform-network
+
   # API Gateway
   api-gateway:
     build:
@@ -11,8 +29,14 @@ services:
       - "8080:8080"
     environment:
       - SPRING_PROFILES_ACTIVE=docker
-      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://eureka-server:8761/eureka/
-    # depends_on: eureka-server (external service)
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://yushan-eureka-registry:8761/eureka/
+      - REDIS_HOST=gateway-redis
+      - REDIS_PORT=6379
+      - KAFKA_BOOTSTRAP_SERVERS=yushan-shared-kafka:29092
+      - USER_SERVICE_URL=http://yushan-user-service:8081
+    depends_on:
+      gateway-redis:
+        condition: service_healthy
     networks:
       - yushan-platform-network
     healthcheck:
@@ -20,6 +44,10 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
+      start_period: 60s
+
+volumes:
+  gateway_redis_data:
 
 networks:
   yushan-platform-network:
