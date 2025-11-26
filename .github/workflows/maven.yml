@@ -60,13 +60,13 @@ jobs:
         cache: maven
         
     - name: Run SpotBugs (static analysis)
-      run: ./mvnw spotbugs:check
+      run: ./mvnw com.github.spotbugs:spotbugs-maven-plugin:4.8.6.0:check
       
     - name: Run Checkstyle (code style)
-      run: ./mvnw checkstyle:check
+      run: ./mvnw org.apache.maven.plugins:maven-checkstyle-plugin:3.5.0:check
       
     - name: Generate SpotBugs SARIF
-      run: ./mvnw spotbugs:spotbugs -Dspotbugs.outputFormat=sarif -Dspotbugs.outputFile=spotbugs.sarif
+      run: ./mvnw com.github.spotbugs:spotbugs-maven-plugin:4.8.6.0:spotbugs -Dspotbugs.outputFormat=sarif -Dspotbugs.outputFile=spotbugs.sarif
       
     - name: Check if SARIF file exists
       run: |
@@ -84,11 +84,11 @@ jobs:
         sarif_file: spotbugs.sarif
         
     - name: Run Unit Tests and generate JaCoCo coverage
-      run: ./mvnw -B -Dspring.profiles.active=test test jacoco:report
+      run: ./mvnw -B -Dspring.profiles.active=test test org.jacoco:jacoco-maven-plugin:report
       
     - name: Run SonarCloud Analysis (use compiled classes and JaCoCo report)
       run: |
-        ./mvnw -B sonar:sonar \
+        ./mvnw -B org.sonarsource.scanner.maven:sonar-maven-plugin:sonar \
           -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml \
           -Dsonar.java.binaries=target/classes
       env:
