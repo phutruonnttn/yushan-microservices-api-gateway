@@ -21,5 +21,42 @@ public class ApiResponse<T> {
     
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private LocalDateTime timestamp;
+    
+    // Static factory methods
+    public static <T> ApiResponse<T> success(T data) {
+        ApiResponse<T> response = new ApiResponse<>();
+        response.setCode(200);
+        response.setMessage("Success");
+        response.setData(data);
+        response.setTimestamp(LocalDateTime.now());
+        return response;
+    }
+    
+    public static <T> ApiResponse<T> success(String message, T data) {
+        ApiResponse<T> response = new ApiResponse<>();
+        response.setCode(200);
+        response.setMessage(message);
+        response.setData(data);
+        response.setTimestamp(LocalDateTime.now());
+        return response;
+    }
+    
+    public static <T> ApiResponse<T> error(int code, String message) {
+        ApiResponse<T> response = new ApiResponse<>();
+        response.setCode(code);
+        response.setMessage(message);
+        response.setData(null);
+        response.setTimestamp(LocalDateTime.now());
+        return response;
+    }
+    
+    public static <T> ApiResponse<T> error(int code, String message, T data) {
+        ApiResponse<T> response = new ApiResponse<>();
+        response.setCode(code);
+        response.setMessage(message);
+        response.setData(data);
+        response.setTimestamp(LocalDateTime.now());
+        return response;
+    }
 }
 

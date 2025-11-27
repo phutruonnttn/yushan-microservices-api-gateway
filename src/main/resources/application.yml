@@ -30,7 +30,11 @@ spring:
       key-serializer: org.apache.kafka.common.serialization.StringDeserializer
       value-serializer: org.apache.kafka.common.serialization.StringDeserializer
   
+  # Feign Circuit Breaker Configuration
   cloud:
+    openfeign:
+      circuitbreaker:
+        enabled: true
     gateway:
       # Enable service discovery routing
       discovery:
@@ -375,3 +379,34 @@ user-blocklist:
     retry-delays: 30s,60s,120s,240s,480s  # Exponential backoff delays (starting from 30s)
     user-service-url: ${USER_SERVICE_URL:http://localhost:8081}
     sync-interval: 1h  # Periodic sync interval
+
+# Resilience4j Configuration
+resilience4j:
+  circuitbreaker:
+    instances:
+      user-service:
+        registerHealthIndicator: true
+        slidingWindowType: COUNT_BASED
+        slidingWindowSize: 20
+        minimumNumberOfCalls: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 10s
+        permittedNumberOfCallsInHalfOpenState: 5
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+        slowCallRateThreshold: 100
+        slowCallDurationThreshold: 5s
+  retry:
+    instances:
+      user-service:
+        maxAttempts: 3
+        waitDuration: 1000ms
+        retryExceptions:
+          - java.net.SocketTimeoutException
+          - java.util.concurrent.TimeoutException
+          - org.springframework.web.client.ResourceAccessException
+  ratelimiter:
+    instances:
+      api-gateway-global:
+        limitForPeriod: 100
+        limitRefreshPeriod: 60s
+        timeoutDuration: 0ms

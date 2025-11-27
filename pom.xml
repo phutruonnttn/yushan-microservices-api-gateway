@@ -136,6 +136,12 @@
             </exclusions>
         </dependency>
         
+        <!-- Circuit Breaker for Feign Clients -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-circuitbreaker-resilience4j</artifactId>
+        </dependency>
+        
         <!-- Spring Web for HttpMessageConverters (required by Feign Client in Gateway) -->
         <!-- Exclude Tomcat to avoid conflict with Netty (Gateway uses Netty) -->
         <dependency>

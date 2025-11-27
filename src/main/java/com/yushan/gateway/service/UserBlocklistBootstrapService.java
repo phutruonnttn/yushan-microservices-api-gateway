@@ -2,6 +2,7 @@ package com.yushan.gateway.service;
 
 import com.yushan.gateway.client.UserServiceClient;
 import com.yushan.gateway.dto.ApiResponse;
+import feign.FeignException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -139,7 +140,14 @@ public class UserBlocklistBootstrapService {
     /**
      * Fetch blocked users from User Service internal endpoint using Feign Client
      * 
+     * Note: This method handles Circuit Breaker fallback detection.
+     * If Circuit Breaker is OPEN and fallback is called, the fallback returns:
+     * ApiResponse.success("User service temporarily unavailable, using cached blocklist", emptyList)
+     * 
+     * We detect this fallback response and throw an exception to trigger bootstrap retry logic.
+     * 
      * @return Set of blocked user UUIDs
+     * @throws RuntimeException if User Service is unavailable (Circuit Breaker fallback detected)
      */
     private Set<UUID> fetchBlockedUsers() {
         log.debug("Fetching blocked users from User Service via Feign Client");
@@ -147,8 +155,27 @@ public class UserBlocklistBootstrapService {
         try {
             ApiResponse<List<UUID>> response = userServiceClient.getBlockedUsers();
             
-            if (response == null || response.getData() == null) {
-                log.warn("Empty response from User Service");
+            if (response == null) {
+                log.warn("Null response from User Service");
+                throw new RuntimeException("User Service returned null response");
+            }
+            
+            // Detect Circuit Breaker fallback response
+            // Fallback message: "User service temporarily unavailable, using cached blocklist"
+            String message = response.getMessage();
+            if (message != null && message.contains("temporarily unavailable")) {
+                log.warn("Circuit Breaker fallback detected - User Service is unavailable");
+                throw new RuntimeException("User Service unavailable (Circuit Breaker fallback)");
+            }
+            
+            if (response.getData() == null) {
+                log.warn("Empty data in response from User Service");
+                // This could be legitimate (no blocked users) or fallback
+                // Check if it's a fallback by checking message
+                if (message != null && message.contains("temporarily unavailable")) {
+                    throw new RuntimeException("User Service unavailable (Circuit Breaker fallback)");
+                }
+                // Legitimate empty list - no blocked users
                 return new HashSet<>();
             }
             
@@ -156,6 +183,14 @@ public class UserBlocklistBootstrapService {
             log.debug("Fetched {} blocked users from User Service", blockedUserIds.size());
             return blockedUserIds;
             
+        } catch (FeignException e) {
+            // Let FeignException propagate so Circuit Breaker can see the failure
+            // This allows Circuit Breaker to track failures and open when threshold is reached
+            log.error("Failed to fetch blocked users from User Service (FeignException)", e);
+            throw e; // Re-throw FeignException to propagate to Circuit Breaker
+        } catch (RuntimeException e) {
+            // Re-throw our custom exceptions (fallback detection)
+            throw e;
         } catch (Exception e) {
             log.error("Failed to fetch blocked users from User Service", e);
             throw new RuntimeException("Failed to fetch blocked users", e);
