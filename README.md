@@ -542,6 +542,67 @@ spring:
         response-timeout: 30s
 ```
 
+## 🔄 Resilience & Fault Tolerance
+
+### Circuit Breaker (Resilience4j)
+
+The API Gateway implements Circuit Breaker pattern for inter-service calls to prevent cascading failures:
+
+**Feign Client with Circuit Breaker**:
+- ✅ **UserServiceClient**: `getBlockedUsers()` method protected with Circuit Breaker and fallback
+
+**Configuration**:
+```yaml
+resilience4j:
+  circuitbreaker:
+    instances:
+      user-service:
+        slidingWindowType: COUNT_BASED
+        slidingWindowSize: 20
+        failureRateThreshold: 50
+        waitDurationInOpenState: 10s
+        permittedNumberOfCallsInHalfOpenState: 5
+  retry:
+    instances:
+      user-service:
+        maxAttempts: 3
+        waitDuration: 1000ms
+```
+
+**Fallback Strategy**: When User Service is unavailable, the gateway uses cached blocklist data and continues operating normally.
+
+### Rate Limiter (Resilience4j)
+
+Global rate limiting is implemented at the gateway level to protect all downstream services from traffic spikes:
+
+**Implementation**: `RateLimiterGatewayFilter` (GlobalFilter)
+
+**Configuration**:
+```yaml
+resilience4j:
+  ratelimiter:
+    instances:
+      api-gateway-global:
+        limitForPeriod: 100
+        limitRefreshPeriod: 60s
+        timeoutDuration: 0ms
+```
+
+**Rate Limit**: 100 requests per 60 seconds globally
+
+**Excluded Paths** (not rate limited):
+- `/actuator/**` - Health checks and metrics
+- `/health` - Health endpoint
+- `/error` - Error handling
+
+**Response**: When rate limit is exceeded, the gateway returns **429 Too Many Requests** with a `Retry-After: 60` header.
+
+**Benefits**:
+- ✅ Protects all downstream services from traffic spikes
+- ✅ Prevents DDoS attacks and abuse
+- ✅ Ensures fair resource allocation
+- ✅ Configurable per endpoint if needed
+
 ## User Blocklist Management (Phase 3)
 
 **✅ Implemented**: Redis Block List (Option B) for real-time inactive user validation
@@ -601,6 +662,51 @@ Gateway maintains a Redis blocklist of inactive users (SUSPENDED or BANNED) to r
    - After JWT validation, checks Redis blocklist
    - Rejects blocked users with 403 Forbidden
    - Graceful fallback if blocklist check fails
+
+### Conflict Resolution: Bootstrap Retry vs Circuit Breaker
+
+**Problem**: The bootstrap service uses exponential backoff retry (30s → 60s → 120s → 240s → 480s) to sync blocked users on startup. However, when User Service is unavailable, the Circuit Breaker opens and returns a fallback response (success with empty list) instead of throwing an exception. This causes the bootstrap service to think the sync succeeded and skip retry logic.
+
+**Solution**: The `fetchBlockedUsers()` method in `UserBlocklistBootstrapService` detects Circuit Breaker fallback responses by checking the response message. If the message contains "temporarily unavailable", it throws a `RuntimeException` to trigger the exponential retry logic.
+
+**Flow**:
+```
+1. Bootstrap Service: Attempt 1 → Call getBlockedUsers()
+   ↓
+2. Resilience4j Retry: Retry 3 times (1s delay each)
+   ↓
+3. Circuit Breaker: Opens after 3 failures
+   ↓
+4. Fallback: Returns ApiResponse.success("User service temporarily unavailable...", emptyList)
+   ↓
+5. Bootstrap Service: Detects fallback message → Throws RuntimeException
+   ↓
+6. Retry Logic: Catches exception → Waits 30s → Attempt 2
+   ↓
+7. If still fails → Waits 60s → Attempt 3 → ... (exponential backoff)
+```
+
+**Code Implementation**:
+```java
+// UserBlocklistBootstrapService.fetchBlockedUsers()
+ApiResponse<List<UUID>> response = userServiceClient.getBlockedUsers();
+
+// Detect Circuit Breaker fallback response
+String message = response.getMessage();
+if (message != null && message.contains("temporarily unavailable")) {
+    log.warn("Circuit Breaker fallback detected - User Service is unavailable");
+    throw new RuntimeException("User Service unavailable (Circuit Breaker fallback)");
+    // This exception triggers exponential retry logic
+}
+```
+
+**Benefits**:
+- ✅ **Layers Work Together**: Bootstrap retry, Circuit Breaker, and Rate Limiter work harmoniously
+- ✅ **Exponential Retry Preserved**: Bootstrap service continues retrying even when Circuit Breaker is open
+- ✅ **Graceful Degradation**: Gateway continues operating with cached blocklist during retries
+- ✅ **No Conflicts**: Each layer handles its responsibility without interfering with others
+
+**Rate Limiter Compatibility**: The global rate limiter (`RateLimiterGatewayFilter`) only applies to incoming HTTP requests, not to internal Feign client calls. Therefore, it doesn't interfere with the bootstrap service's Feign client calls to User Service.
 
 ### Configuration
 
