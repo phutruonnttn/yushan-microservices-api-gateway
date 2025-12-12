@@ -121,6 +121,21 @@
         <dependency>
             <groupId>org.springframework.kafka</groupId>
             <artifactId>spring-kafka</artifactId>
+            <exclusions>
+                <!-- Exclude vulnerable org.lz4:lz4-java@1.8.0 (CVE-2025-12183, CVE-2025-66566) -->
+                <!-- Replace with at.yawk.lz4:lz4-java:1.10.1 (community-maintained fork with fixes) -->
+                <exclusion>
+                    <groupId>org.lz4</groupId>
+                    <artifactId>lz4-java</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <!-- lz4-java: Fixed CVE-2025-12183 (Out-of-bounds Read) and CVE-2025-66566 (Sensitive Information) -->
+        <!-- Using community-maintained fork at.yawk.lz4:lz4-java:1.10.1 which fixes both vulnerabilities -->
+        <dependency>
+            <groupId>at.yawk.lz4</groupId>
+            <artifactId>lz4-java</artifactId>
+            <version>1.10.1</version>
         </dependency>
         
         <!-- Feign Client for calling User Service (consistent with other services) -->
@@ -185,6 +200,13 @@
                 <groupId>org.apache.kafka</groupId>
                 <artifactId>kafka-clients</artifactId>
                 <version>3.9.1</version>
+                <exclusions>
+                    <!-- Exclude vulnerable org.lz4:lz4-java@1.8.0 (CVE-2025-12183, CVE-2025-66566) -->
+                    <exclusion>
+                        <groupId>org.lz4</groupId>
+                        <artifactId>lz4-java</artifactId>
+                    </exclusion>
+                </exclusions>
             </dependency>
         </dependencies>
     </dependencyManagement>
